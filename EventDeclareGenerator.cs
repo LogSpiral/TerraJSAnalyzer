@@ -14,24 +14,21 @@ public class EventDeclareGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // 第一步：找到所有带有MyDeclare特性的字段
-        //var fieldDeclarations = context.SyntaxProvider
-        //    .CreateSyntaxProvider(
-        //        predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-        //        transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx))
-        //    .Where(static m => m is not null);
         var fieldDeclarations = context.SyntaxProvider
             .ForAttributeWithMetadataName(
             "TerraJS.Contents.Attributes.EventDeclareAttribute",
-            (syntaxNode, _) => true,//syntaxNode is FieldDeclarationSyntax fieldDeclaration,
-            (syntaxContext, _) => new EventDeclarationInfo((IFieldSymbol)syntaxContext.TargetSymbol)
-            );
+            (syntaxNode, _) => CheckSyntaxNode(syntaxNode),
+            (syntaxContext, _) => new EventDeclarationInfo((IFieldSymbol)syntaxContext.TargetSymbol));
         // 第二步：组合编译信息
         var compilationAndFields = context.CompilationProvider.Combine(fieldDeclarations.Collect());
 
         // 第三步：生成代码
         context.RegisterSourceOutput(compilationAndFields, static (spc, source) => Execute(source.Left, source.Right, spc));
     }
-
+    private static bool CheckSyntaxNode(SyntaxNode node) 
+    {
+        return node is VariableDeclaratorSyntax variableDeclarator && variableDeclarator.ToString().EndsWith("Event");
+    }
     private static void Execute(Compilation _, ImmutableArray<EventDeclarationInfo> fields, SourceProductionContext context)
     {
         if (fields.IsDefaultOrEmpty)
@@ -67,12 +64,11 @@ public class EventDeclareGenerator : IIncrementalGenerator
 
         if (!string.IsNullOrEmpty(classInfo.NameSpace))
         {
-            sb.AppendLine($"namespace {classInfo.NameSpace}");
-            sb.AppendLine("{");
+            sb.AppendLine($"namespace {classInfo.NameSpace};");
         }
 
-        sb.AppendLine($"    partial class {classInfo.ClassName}");
-        sb.AppendLine("    {");
+        sb.AppendLine($"partial class {classInfo.ClassName}");
+        sb.AppendLine("{");
 
         foreach (var field in fields)
         {
@@ -81,67 +77,22 @@ public class EventDeclareGenerator : IIncrementalGenerator
             // 生成EventInfo特性
             if (field.Parameters.Length > 0)
             {
-                sb.Append("        [EventInfo(");
+                sb.Append("    [EventInfo(");
                 sb.Append(string.Join(", ", field.Parameters.Select(p => $"{p}")));
                 sb.AppendLine(")]");
             }
             else
             {
-                sb.AppendLine("        [EventInfo]");
+                sb.AppendLine("    [EventInfo]");
             }
 
             // 生成方法
-            sb.AppendLine($"        public void {methodName}({field.TypeName} @delegate) => {field.FieldName} += @delegate;");
+            sb.AppendLine($"    public void {methodName}({field.TypeName} @delegate) => {field.FieldName} += @delegate;");
             sb.AppendLine();
         }
 
-        sb.AppendLine("    }");
-
-        if (!string.IsNullOrEmpty(classInfo.NameSpace))
-        {
-            sb.AppendLine("}");
-        }
+        sb.AppendLine("}");
 
         return sb.ToString();
     }
-}
-
-// 辅助类
-internal readonly struct EventDeclarationInfo
-{
-    private static SymbolDisplayFormat DisplayFormat { get; } = new SymbolDisplayFormat(
-    // 设置全局命名空间的显示风格
-    globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
-    // 配置类型名称的显示方式
-    typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-    // 配置泛型参数的显示方式（包括其命名空间）
-    genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters
-    );
-
-
-    public readonly string FieldName => FieldSymbol.Name;
-    public readonly string TypeName => FieldSymbol.Type.ToDisplayString(DisplayFormat);
-    public string[] Parameters { get; }
-    public IFieldSymbol FieldSymbol { get; }
-    public EventDeclarationInfo(IFieldSymbol fieldSymbol)
-    {
-        FieldSymbol = fieldSymbol;
-        var attibuteData =
-            fieldSymbol
-            .GetAttributes()
-            .FirstOrDefault(
-                attributeData =>
-                attributeData.AttributeClass.ToDisplayString()
-                == "TerraJS.Contents.Attributes.EventDeclareAttribute"
-                );
-        Parameters =
-            attibuteData == null
-            ? []
-            : [.. from value in attibuteData.ConstructorArguments.First().Values select value.ToCSharpString()];
-    }
-}
-internal struct ClassInfo(string className, string nameSpace)
-{
-    public string ClassName = className;
-    public string NameSpace = nameSpace;
 }
