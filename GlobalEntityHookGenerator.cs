@@ -112,10 +112,6 @@ public class GlobalEntityHookGenerator : IIncrementalGenerator
         foreach (var field in fields)
         {
             if (field.FieldSymbol.Type is not INamedTypeSymbol namedType) continue;
-            if (field.ManualSetDefaultValue) 
-            {
-                
-            }
             var methodName = field.FieldName.Substring(0, field.FieldName.Length - "Event".Length);
 
             if (!namedType.IsGenericType)
@@ -130,17 +126,17 @@ public class GlobalEntityHookGenerator : IIncrementalGenerator
                 int length = typeParameters.Length;
                 if (!isAction) length--;
                 bool singleArgument = length == 1;
-                sb.Append($"    public override {(isAction ? "void" : typeParameters.Last().ToDisplayString())} {methodName}(");
+                sb.Append($"    public override {(isAction ? "void" : typeParameters.Last().ToDisplayString(Utils.DisplayFormat))} {methodName}(");
                 if (singleArgument)
                 {
-                    sb.AppendLine($"{typeParameters[0].ToDisplayString()} arg1)");
+                    sb.AppendLine($"{typeParameters[0].ToDisplayString(Utils.DisplayFormat)} arg1)");
                 }
                 else
                 {
                     sb.AppendLine();
                     for (int n = 0; n < length; n++)
                     {
-                        sb.AppendLine($"        {typeParameters[n].ToDisplayString()} arg{n + 1}{(n == length - 1 ? ")" : ",")}");
+                        sb.AppendLine($"        {typeParameters[n].ToDisplayString(Utils.DisplayFormat)} arg{n + 1}{(n == length - 1 ? ")" : ",")}");
                     }
                 }
 
